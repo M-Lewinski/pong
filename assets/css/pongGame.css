@@ -1,0 +1,14 @@
+#game {
+    position:absolute;
+    margin-left:-320px;
+    left:50%;
+    margin-top:-240px;
+    top:50%;
+    width:640px;
+    height:480px;
+    border:1px solid #AAA;
+}
+body {
+    margin:0;
+}
+canvas {background-color:#AAA;}
