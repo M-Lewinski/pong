@@ -7,12 +7,98 @@
         <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css" integrity="sha384-MCw98/SFnGE8fJT3GXwEOngsV7Zt27NXFoaoApmYm81iuXoPkFOJwJ8ERdknLPMO" crossorigin="anonymous">
     </head>
     <body>
-		<input id="nameInput" type="text"/>
-        <button type="button" class="btn btn-primary" id="loginButton" onclick="login()">Login</button>
-        <pre id="output"></pre>
-		<canvas id="game" width="640" height="480" >Canvas is not supported</canvas>
-		<div id="fps"></div>
-		<script src="assets/js/pongGame.js"></script>
+        <div class="container-fluid">
+            <div class="row">
+                <div class="col">
+                    <div>
+                        <label for="playerNameInput">Player Name</label>
+                        <span class="input-group">
+                            <input type="text" class="form-control " id="playerNameInput" placeholder="Enter player name">
+                            <button type="button" class="btn btn-primary btn-inline" id="loginButton" onclick="login()">Login</button>
+                        </span>
+                    </div>
+                </div>
+                <div class="col">
+
+                </div>
+            </div>
+            <div class="row">
+                <div class="col">
+                    <div class="labelGroup">
+                        <label for="roomNameLabel">Room name: </label>
+                        <label id="roomNameLabel">NONE</label>
+                    </div>
+                    <div class="labelGroup">
+                        <label for="roomLifeLabel">Life count: </label>
+                        <label id="roomLifeLabel">NONE</label>
+                        <label for="roomWaitingLabel">Waiting: </label>
+                        <label id="roomWaitingLabel">NONE</label>
+                    </div>
+                    <div class="labelGroup">
+                        <button type="button" class="btn btn-success btn-inline" id="readyButton" onclick="readyPlayer()">Ready</button>
+                        <button type="button" class="btn btn-danger btn-inline" id="leaveRoomButton" onclick="leaveRoom()">Leave room</button>
+                    </div>
+                    <div class="table-wrapper-scroll table-bordered table-hover">
+                        <table class="table">
+                            <thead>
+                                <th scope="col">#</th>
+                                <th scope="col">Name</th>
+                                <th scope="col">Ready</th>
+                            </thead>
+                            <tbody id="roomTable">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="labelGroup">
+                        <label for="roomNameInput">Room Name</label>
+                        <input type="text" class="form-control" id="roomNameInput" placeholder="Enter room name">
+                    </div>
+                    <div class="labelGroup">
+                        <label for="playerCountInput">Select player count:</label>
+                        <select class="form-control" id="playerCountInput">
+                            <option>2</option>
+                            <option>3</option>
+                            <option>4</option>
+                        </select>
+                    </div>
+                    <div class="labelGroup">
+                        <label for="roomLifeInput">Life count</label>
+                        <input type="number" class="form-control" id="roomLifeInput" max="1" min="255" placeholder="Enter life count 1-255">
+                        <button type="button" class="btn btn-success btn-horizontal" id="createRoomButton" onclick="createRoom()" >Create room</button>
+                    </div>
+                </div>
+            </div>
+            <div class="row">
+                <div class="table-wrapper table-wrapper-scroll ">
+                    <table class="table table-striped table-bordered table-hover">
+                        <thead>
+                        <tr>
+                            <th scope="col">Name</th>
+                            <th scope="col">Players count</th>
+                            <th scope="col">Ready players</th>
+                            <th scope="col">Max players</th>
+                            <th scope="col">Life count</th>
+                            <th scope="col">Status</th>
+                            <th scope="col">Join</th>
+                        </tr>
+                        </thead>
+                        <tbody id="allRoomTable">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="row">
+                <canvas id="game" width="640" height="480" >Canvas is not supported</canvas>
+            </div>
+            <div class="row justify-content-center text-center">
+                <div>
+                    <label id="credits">Made by Michał Lewiński 2018</label>
+                </div>
+            </div>
+        </div>
+        <script src="assets/js/pongGame.js"></script>
         <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous"></script>
         <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.3/umd/popper.min.js" integrity="sha384-ZMP7rVo3mIykV+2+9J3UJ46jBk0WLaUAdn689aCwoqbBJiSnjAK/l8WvCWPIPm49" crossorigin="anonymous"></script>
         <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/js/bootstrap.min.js" integrity="sha384-ChfqqxuZUCnJSK3+MXmPNIyE6ZbWh2IMqE241rYiqJxyMiZ6OW/JmZQ5stwEULTy" crossorigin="anonymous"></script>

@@ -11,7 +11,10 @@ var	done = make(chan bool)
 var Server = ServerState{
 	Players: map[string]*Player{},
 	Rooms: map[string]*Room{},
-	Mutex: &sync.Mutex{},
+	Clients: make([]*ClientSession,0),
+	MutexRooms: &sync.Mutex{},
+	MutexPlayers: &sync.Mutex{},
+	MutexClients: &sync.Mutex{},
 }
 
 func main() {
@@ -37,8 +40,13 @@ func upgradeHandler(w http.ResponseWriter, request *http.Request){
 }
 
 func CreateSession(conn *websocket.Conn){
-	client := ClientSession{}
+	client := &ClientSession{}
 	client.Socket = conn
 	client.WriteMutex = &sync.Mutex{}
+	client.WriteChannel = make(chan Message)
+	client.Close = make(chan bool)
+	Server.MutexClients.Lock()
+	Server.Clients = append(Server.Clients, client)
+	Server.MutexClients.Unlock()
 	go client.ManageSession()
 }

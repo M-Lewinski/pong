@@ -1,29 +1,25 @@
 package main
 
-import "time"
+import (
+	"time"
+	"sync"
+)
 
 type Player struct {
-	Connected          bool
-	CurrentRoom        string
+	//Connected          bool
+	CurrentRoom        *Room		`json:"-"`
 	Id                 string
 	Name               string
 	LastDisconnectDate time.Time
+	PlayerMutex		   *sync.Mutex	`json:"-"`
+	GameChannel			map[string]chan []byte	`json:"-"`
+	LastMove byte`json:"-"`
 }
 
-func (player *Player) Disconnect(){
-	player.Connected = false
-	player.LastDisconnectDate = time.Now().UTC()
-	if player.CurrentRoom != "" {
-		Server.Mutex.Lock()
-		room := Server.FindRomm(player.CurrentRoom)
-		if room != nil {
-			room.RoomMutex.Lock()
-			for i := range room.Players {
-				if (room.Players[i] == player){
-					room.Players[i] = nil
-				}
-			}
-			room.RoomMutex.Unlock()
-		}
-	}
-}
+//PlayerMutex.lock -> Server.MutexRooms.lock -> Server.MutexRooms.unlock -> RoomMutex.lock -> RoomMutex.unlock -> PlayerMutex.unlock
+//func (player *Player) Disconnect(client *ClientSession) {
+//	player.PlayerMutex.Lock()
+//	defer player.PlayerMutex.Unlock()
+//	player.LastDisconnectDate = time.Now().UTC()
+//
+//}
