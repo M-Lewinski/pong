@@ -11,9 +11,9 @@ type Player struct {
 	Id                 string
 	Name               string
 	LastDisconnectDate time.Time
-	PlayerMutex		   *sync.Mutex	`json:"-"`
-	GameChannel			map[string]chan []byte	`json:"-"`
-	LastMove byte`json:"-"`
+	PlayerMutex        *sync.Mutex            `json:"-"`
+	ClientGameChannels map[*ClientSession]chan []byte `json:"-"`
+	LastMove           byte                   `json:"-"`
 }
 
 //PlayerMutex.lock -> Server.MutexRooms.lock -> Server.MutexRooms.unlock -> RoomMutex.lock -> RoomMutex.unlock -> PlayerMutex.unlock

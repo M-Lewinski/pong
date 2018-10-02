@@ -32,22 +32,25 @@ const MsgJoinRoom     = "JoinRoom";
 const MsgLeaveRoom     = "LeaveRoom";
 const MsgReadyPlayer  = "ReadyPlayer";
 const ParamPlayerId  = "playerId";
+const MsgDeleteRoom = "DeleteRoom";
+
+
 var playerNameInput = document.getElementById("playerNameInput");
 
 
 var loginButton = document.getElementById("loginButton");
 var socket = new WebSocket("ws://localhost:8080/ws");
 var currentRoom = null;
-var previousRoom = null;
 var mainPlayer = null;
 var PlayingGame = false;
+var gamePlayers = null;
 
 var PlayerPosition = 0;
 var ColorTable = [];
 ColorTable.push("red","blue","yellow", "green");
 
 var RotationTable = [];
-RotationTable.push(0.0,180.0,90.0,270.0);
+RotationTable.push(0.0,180.0,270.0,90.0);
 
 var AnimationId = null;
 
@@ -75,19 +78,29 @@ socket.onclose = function (){
 };
 
 socket.onmessage = function (msg){
-    // console.log(msg)
     if (isByteArray(msg.data)){
         var gI = GameInfoParse(msg.data);
         if (PlayingGame === false){
             // Game.init(gI);
             PlayingGame = true;
+            if (currentRoom != null){
+                gamePlayers = currentRoom.Players;
+            }
+            else {
+                gamePlayers = null;
+            }
             PlayerPosition = CalculatePlayerPosition();
             SendInput();
         }
-        gI = RotateGameInfo(gI);
-        // console.log(gI);
-        // Game.GI = gI;
-        Game.draw(gI);
+        GameInfoTable(gI);
+        if (gI.AlivePlayers === 0){
+            ctx.clearRect(0,0,canvas.width,canvas.height);
+            PlayingGame = false;
+        }
+        else{
+            gI = RotateGameInfo(gI);
+            Game.draw(gI);
+        }
     }
     else{
         var json = JSON.parse(msg.data);
@@ -105,6 +118,9 @@ socket.onmessage = function (msg){
                     break;
                 case MsgAllRooms:
                     receivedAllRooms(json.Data,document.getElementById( "allRoomTable"));
+                    break;
+                case MsgDeleteRoom:
+                    receivedDeleteRoom(json.Data);
                     break;
             }
         }
@@ -170,7 +186,6 @@ function addNewRoom(room, table) {
         status = '<span class="negative">Playing</span>';
     }
     cols += '<td>' + status + '</td>';
-    console.log("****"+room.Id);
     // cols += '<td><button type="button" class="btn btn-success" onclick="joinRoom()" >Join</button></td>';
     cols += `<td><button type="button" class="btn btn-success" onclick="joinRoom('${room.Id}')">Join</button></td>`;
     newRow.innerHTML = cols;
@@ -230,6 +245,59 @@ function updateCurrentRoom(room) {
     }
 }
 
+function GameInfoTable(gameInfo) {
+    var oldLifeTable = document.getElementById("lifeTable");
+    var newLifeTable = document.createElement('tbody');
+    newLifeTable.setAttribute("id", "lifeTable");
+    for (let j = 0; j < gameInfo.PlayerCount ;j++){
+        let color = ColorTable[j];
+        let newRow = newLifeTable.insertRow(newLifeTable.rows.length);
+        let cols = '';
+        cols += '<td class="'+color+'">' +  gameInfo.Lifes[j] + '</td>';
+        newRow.innerHTML = cols;
+    }
+    oldLifeTable.parentNode.replaceChild(newLifeTable,oldLifeTable);
+
+    var oldPlayerTable = document.getElementById("playerTabel");
+    var newPlayerTable = document.createElement('tbody');
+    newPlayerTable.setAttribute("id", "playerTabel");
+    for (let i=0; i < gameInfo.PlayerCount ;i++){
+        if (gameInfo.FinishedPlayers[i] === 0){
+            continue;
+        }
+        let playerIndex = gameInfo.FinishedPlayers[i]-1;
+        let color = ColorTable[playerIndex];
+        let newRow = newPlayerTable.insertRow(newPlayerTable.rows.length);
+        let cols = "";
+        cols += '<td>'+ (i+1) +'</td>';
+        cols += '<td class="' + color+ '">'+ gamePlayers[playerIndex].Name +'</td>';
+        newRow.innerHTML = cols;
+    }
+    oldPlayerTable.parentNode.replaceChild(newPlayerTable,oldPlayerTable);
+}
+
+function receivedDeleteRoom(Data){
+    console.log("DeleteingRoom");
+    var roomId = Data.Id;
+    var nameLabel = document.getElementById("roomNameLabel");
+    var lifeLabel = document.getElementById("roomLifeLabel");
+    var waitingLabel = document.getElementById("roomWaitingLabel");
+    if (currentRoom != null){
+        if (currentRoom.Id === roomId){
+            nameLabel.innerHTML = "NONE";
+            lifeLabel.innerHTML = "NONE";
+            waitingLabel.innerHTML = "NONE";
+            currentRoom = null;
+            let oldTable = document.getElementById("roomTable");
+            oldTable.innerHTML = "";
+        }
+    }
+    var tableRow = document.getElementById(roomId);
+    if (tableRow !== null){
+        tableRow.parentNode.removeChild(tableRow);
+    }
+
+}
 
 function receivedError(json){
     window.alert(json.Data.ErrorMsg);
@@ -328,17 +396,21 @@ function SendInput(){
 function GameInfoParse(data) {
     var GameInfo = {};
     var index = 0;
-    var dataArray = new Int8Array(data);
+    var dataArray = new Uint8Array(data);
     // console.log(dataArray);
     GameInfo.DataSize = dataArray[index++];
     GameInfo.PlayerCount = dataArray[index++];
-
+    GameInfo.AlivePlayers = dataArray[index++];
     GameInfo.Lifes = [];
     let i;
     for (i = 0 ; i < GameInfo.PlayerCount;i++){
-        GameInfo.Lifes[i] = dataArray[index+i];
+        GameInfo.Lifes.push(dataArray[index++]);
     }
-    index += i;
+
+    GameInfo.FinishedPlayers = [];
+    for (i = 0; i < GameInfo.PlayerCount; i++){
+        GameInfo.FinishedPlayers.push(dataArray[index++]);
+    }
 
     GameInfo.BallRadius = GetFloat(index,dataArray,GameInfo.DataSize);
     index += GameInfo.DataSize;
@@ -365,6 +437,14 @@ function GameInfoParse(data) {
         index += GameInfo.DataSize;
         platPos.y = GetFloat(index,dataArray,GameInfo.DataSize);
         index += GameInfo.DataSize;
+
+        platPos.w = GameInfo.PlatformWidth;
+        platPos.h = GameInfo.PlatformHeight;
+        if (j > 1){
+            platPos.w = GameInfo.PlatformHeight;
+            platPos.h = GameInfo.PlatformWidth;
+        }
+
         GameInfo.Platforms.push(platPos);
     }
 
@@ -396,15 +476,18 @@ function RotateGameInfo(gameInfo){
     }
     var rotation = RotationTable[PlayerPosition];
     var radRotation  = rotation*Math.PI/180.0;
-    let width = gameInfo.PlatformWidth;
-    let height = gameInfo.PlatformHeight;
-    if (PlayerPosition > 1){
-        gameInfo.PlatformWidth = height;
-        gameInfo.PlatformHeight = width;
-    }
     gameInfo.SpawnerArrow = RotateVectorCenter(gameInfo.SpawnerArrow,radRotation);
     for (let j = 0; j < gameInfo.Platforms.length; j ++){
+        // console.log(gameInfo.Platforms[j]);
+        var w = gameInfo.Platforms[j].w;
+        var h = gameInfo.Platforms[j].h;
         gameInfo.Platforms[j] = RotateVectorCenter(gameInfo.Platforms[j],radRotation);
+        gameInfo.Platforms[j].w = w;
+        gameInfo.Platforms[j].h = h;
+        if (PlayerPosition > 1){
+            gameInfo.Platforms[j].w = h;
+            gameInfo.Platforms[j].h = w;
+        }
     }
     for (let j = 0; j < gameInfo.Balls.length; j ++){
         gameInfo.Balls[j] = RotateVectorCenter(gameInfo.Balls[j],radRotation);
@@ -441,27 +524,8 @@ function GetFloat(index,data, datasize){
     return result[0];
 }
 
-
-
 var Game = {
     init: function (gameInfo) {
-        // Game.render();
-        // for (var i = 0; i < 10; i++)
-        //     for (var j = 0; j < 15; j++)
-        //         Game.gameArea.push(new this.bar(j * 60, i * 30, 40, 5, Math.floor((Math.random() * 3) + 1)));
-        //
-        // this.barJoueur = new this.bar(x, y, 100, 10);
-        // this.ball = new this.balle(100, 300, 10, 8, 8);
-        //
-        // canvas.onmousemove = function (e) {
-        //     x = e.pageX - this.offsetLeft;
-        //     y = e.pageY - this.offsetTop;
-        //     Game.barJoueur.x = e.pageX - this.offsetLeft;
-        //     Game.barJoueur.y = e.pageY - this.offsetTop;
-        // };
-
-
-        // this.render();
     },
 
     // render: function () {
@@ -471,7 +535,26 @@ var Game = {
 
     draw: function (gameInfo) {
         // console.log(gameInfo);
+        var dangerAreaDrawTable = [];
+        switch (PlayerPosition) {
+            case 0:
+                dangerAreaDrawTable.push(0,1,2,3);
+                break;
+            case 1:
+                dangerAreaDrawTable.push(1,0,3,2);
+                break;
+            case 2:
+                dangerAreaDrawTable.push(2,3,1,0);
+                break;
+            case 3:
+                dangerAreaDrawTable.push(3,2,0,1);
+                break;
+        }
+
         ctx.clearRect(0, 0, canvas.width, canvas.height);
+        for (let j = 0; j < gameInfo.PlayerCount; j++){
+            Game.drawDangerArea(j, dangerAreaDrawTable[j],gameInfo)
+        }
         Game.drawArrow(canvas.width/2.0,canvas.height/2.0,gameInfo.SpawnerArrow.x ,gameInfo.SpawnerArrow.y);
         for (let j = 0; j < gameInfo.Balls.length ; j++){
             this.drawBall(gameInfo.Balls[j],gameInfo);
@@ -479,32 +562,13 @@ var Game = {
         for (let j = 0; j < gameInfo.Platforms.length; j++){
             Game.drawBar(j,gameInfo.Platforms[j],gameInfo)
         }
-        //ctx.clearRect(ball.x-ball.r-1, ball.y-ball.r-1, ball.r*2+1, ball.r*2+1);
-        // this.collisionArea();
-        // this.mouvement();
-
-        // this.drawBar(this.barJoueur);
-
-        // if (this.isIntersect(this.barJoueur, this.ball) === true)
-        //     console.log(true);
-
-        // this.drawAllbar(this.gameArea);
-        // this.drawBall();
-        // ctx.beginPath();
-        // ctx.fillRect(10,10,100,100);
-        // ctx.closePath();
-        // ctx.stroke();
-        // ctx.beginPath();
-        // ctx.fillRect(10,110,100.9,100.9);
-        // ctx.closePath();
-        // ctx.stroke();
     },
 
     drawArrow: function(fromx, fromy, tox, toy){
-    var headlen = 30;   // length of head in pixels
+    var headlen = 12;   // length of head in pixels
     var angle = Math.atan2(toy-fromy,tox-fromx);
     ctx.beginPath();
-        ctx.strokeStyle = '#ff9900';
+        ctx.strokeStyle = '#999900';
         ctx.lineWidth = 5;
         ctx.moveTo(fromx, fromy);
         ctx.lineTo(tox, toy);
@@ -515,28 +579,36 @@ var Game = {
      ctx.stroke();
      },
 
-    drawBar: function (index, pos,gameInfo) {
+    drawBar: function (index, plat,gameInfo) {
+        if (gameInfo.Lifes[index] === 0){
+            return;
+        }
         ctx.beginPath();
         ctx.fillStyle = ColorTable[index];
-        ctx.fillRect(pos.x-(gameInfo.PlatformWidth/2.0), pos.y-(gameInfo.PlatformHeight/2.0), gameInfo.PlatformWidth, gameInfo.PlatformHeight);
+        ctx.fillRect(plat.x-(plat.w/2.0), plat.y-(plat.h/2.0), plat.w, plat.h);
         ctx.closePath();
         ctx.stroke();
     },
 
-    drawAllbar: function (gameArea) {
+    drawDangerArea: function(index, drawIndex, gameInfo){
+        if (gameInfo.Lifes[drawIndex] === 0){
+            return;
+        }
         ctx.beginPath();
-        for (var i = 0; i < gameArea.length; i++) {
-            if (gameArea[i]) {
-                if (gameArea[i].life === 3)
-                    ctx.fillStyle = '#00ff3f';
-                else if (gameArea[i].life === 2)
-                    ctx.fillStyle = '#ffe900';
-                else
-                    ctx.fillStyle = '#ff0000';
-
-                ctx.fillRect(gameArea[i].x, gameArea[i].y, gameArea[i].width, gameArea[i].height);
-                this.isIntersect(gameArea[i], this.ball, i);
-            }
+        ctx.fillStyle = ColorTable[drawIndex];
+        switch (index) {
+            case 0:
+                ctx.fillRect(0,canvas.height-gameInfo.DangerZoneSize,canvas.width,gameInfo.DangerZoneSize);
+                break;
+            case 1:
+                ctx.fillRect(0,0,canvas.width,gameInfo.DangerZoneSize);
+                break;
+            case 2:
+                ctx.fillRect(0,0,gameInfo.DangerZoneSize,canvas.height);
+                break;
+            case 3:
+                ctx.fillRect(canvas.width-gameInfo.DangerZoneSize,0,gameInfo.DangerZoneSize,canvas.height);
+                break;
         }
         ctx.closePath();
         ctx.stroke();
@@ -550,9 +622,6 @@ var Game = {
         ctx.closePath();
         ctx.fill();
     },
-    unset: function (array, value) {
-        array.splice(array.indexOf(value), 1);
-    }
 };
 
 document.addEventListener('keydown', function(event) {

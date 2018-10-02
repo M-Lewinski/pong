@@ -19,6 +19,7 @@ const (
 	MsgJoinRoom     = "JoinRoom"
 	MsgLeaveRoom     = "LeaveRoom"
 	MsgReadyPlayer  = "ReadyPlayer"
+	MsgDeleteRoom = "DeleteRoom"
 )
 
 type Room struct {
@@ -97,13 +98,18 @@ func (client *ClientSession) ManageSession(){
 				client.SendError(errors.New("No data send"))
 			}
 			err = client.ReceivePlayerInput(msg[0])
-			if err != nil {
-				client.SendError(err)
-			}
+			//if err != nil {
+			//	client.SendError(err)
+			//}
 		} else if (msgType == websocket.CloseMessage || msgType == -1){
 			log.Println("Closing client session")
 			if (client.Player != nil){
-				client.Player.Disconnect()
+				//client.Player.Disconnect()
+				client.Player.PlayerMutex.Lock()
+				if _, ok := client.Player.ClientGameChannels[client]; ok{
+					delete(client.Player.ClientGameChannels,client)
+				}
+				client.Player.PlayerMutex.Unlock()
 			}
 			client.LeaveRoom()
 			Server.MutexClients.Lock()
@@ -294,7 +300,8 @@ func (client *ClientSession) RestoreSession(message Message) error{
 		return errors.New("Couldn't find player session")
 	}
 	player.PlayerMutex.Lock()
-	player.Connected = true
+	//player.Connected = true
+	player.ClientGameChannels[client] = make (chan []byte)
 	msg := createMessage(MsgCreatePlayer,player)
 	player.PlayerMutex.Unlock()
 	client.Player = player
@@ -320,6 +327,7 @@ func (client *ClientSession) CreatePlayer(message Message) error {
 		return err
 	}
 	createdPlayer.PlayerMutex.Lock()
+	createdPlayer.ClientGameChannels[client] = make (chan []byte)
 	msg := createMessage(MsgCreatePlayer,createdPlayer)
 	createdPlayer.PlayerMutex.Unlock()
 	client.Player = createdPlayer
@@ -431,7 +439,7 @@ func (client *ClientSession) SendGameInfo(){
 	}
 	Loop: for {
 		select {
-		case data := <-client.Player.GameChannel:
+		case data := <-client.Player.ClientGameChannels[client]:
 			client.WriteMutex.Lock()
 			client.Socket.WriteMessage(websocket.BinaryMessage,data)
 			client.WriteMutex.Unlock()
@@ -451,6 +459,9 @@ func (client *ClientSession) ReceivePlayerInput(move byte) error {
 	}
 	client.Player.PlayerMutex.Lock()
 	defer client.Player.PlayerMutex.Unlock()
+	if client.Player.CurrentRoom == nil{
+		return errors.New("Player didn't join any room")
+	}
 	if (client.Player.CurrentRoom.Playing == false){
 		return errors.New("Cannot process input with no game playing")
 	}

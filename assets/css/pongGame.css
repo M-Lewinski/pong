@@ -10,6 +10,10 @@
     border:5px solid #AAA;
 }
 
+.smallTable{
+    max-width: 300px;
+}
+
 #credits{
     display: block;
     text-align: center;
@@ -24,6 +28,26 @@
 .negative{
     color: firebrick;
     font-weight: bold !important;
+}
+
+.red{
+    color: red;
+    font-weight: bold;
+}
+
+.blue{
+    font-weight: bold;
+    color: blue;
+}
+
+.yellow{
+    font-weight: bold;
+    color: #DDff00;
+}
+
+.green{
+    font-weight: bold;
+    color: green;
 }
 
 .labelGroup{

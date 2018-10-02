@@ -59,7 +59,6 @@
                         <label for="playerCountInput">Select player count:</label>
                         <select class="form-control" id="playerCountInput">
                             <option>2</option>
-                            <option>3</option>
                             <option>4</option>
                         </select>
                     </div>
@@ -90,7 +89,30 @@
                 </div>
             </div>
             <div class="row">
-                <canvas id="game" width="640" height="480" >Canvas is not supported</canvas>
+                <div  class="col justify-content-center">
+                    <canvas id="game" width="640" height="480" >Canvas is not supported</canvas>
+                </div>
+                <div class="col justify-content-center" >
+                    <table class="table table-hover table-striped smallTable">
+                        <thead>
+                        <tr>
+                            <th scope="col">Life</th>
+                        </tr>
+                        </thead>
+                        <tbody id="lifeTable">
+                        </tbody>
+                    </table>
+                    <table class="table table-hover table-striped smallTable">
+                        <thead>
+                        <tr>
+                            <th scope="col">#</th>
+                            <th scope="col">Player Ranking</th>
+                        </tr>
+                        </thead>
+                        <tbody id="playerTabel">
+                        </tbody>
+                    </table>
+                </div>
             </div>
             <div class="row justify-content-center text-center">
                 <div>

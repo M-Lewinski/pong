@@ -89,6 +89,7 @@ func (gCreation *RoomCreation) CreateGameRoom() (*Room,error) {
 	room.wg.Add(room.MaxPlayers)
 	game := &Game{}
 	game.Lifes = make([]byte,room.MaxPlayers)
+	game.FinishedPlayers = make([]byte,room.MaxPlayers)
 	for i := range game.Lifes{
 		game.Lifes[i] = IntToByte(room.Life)
 	}
@@ -110,10 +111,10 @@ func (newPlayer *PlayerCreation) CreateNewPlayer() (*Player,error){
 	createdPlayer := &Player{
 		Name: newPlayer.Name,
 		CurrentRoom: nil,
-		Connected: true,
-		PlayerMutex: &sync.Mutex{},
-		GameChannel: make(chan []byte),
-		LastMove: 0,
+		//Connected: true,
+		PlayerMutex:        &sync.Mutex{},
+		ClientGameChannels: map[*ClientSession]chan []byte{},
+		LastMove:           0,
 	}
 	u, _ := uuid.NewV4()
 	createdPlayer.Id = u.String()

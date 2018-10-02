@@ -11,16 +11,16 @@ import (
 const (
 	GameWidth               = 640
 	GameHeight              = 640
-	BallSpawnTimerInSeconds = 1.0
+	BallSpawnTimerInSeconds = 3.5
 	BallRadius              = 10.0
 	SpawnerSize             = 30.0
-	SpawnerRotationPerSec   = 123
+	SpawnerRotationPerSec   = 47.0
 	BallDefaultSpeed        = 300.0
 	DataBajtSize            = 8
-	PlatformWidth           = 70.0
+	PlatformWidth           = 85.0
 	PlatformHeight          = 20.0
 	PlatformDefaultSpeed    = 400.0
-	DistanceFromPlatform    = 15.0
+	PlatformDistance    = 20.0
 	DangerAreaSize = 20
 )
 
@@ -41,6 +41,7 @@ type Platform struct {
 	Velocity Vec2
 	Width float64
 	Height float64
+	Alive bool
 }
 
 type Spawner struct {
@@ -58,6 +59,8 @@ type Game struct {
 	MaxSpawnedBalls int
 	Spawner *Spawner
 	Lifes []byte
+	FinishedPlayers []byte
+	AlivePlayers byte
 }
 
 
@@ -74,8 +77,8 @@ const (
 
 
 func (game *Game) Start(room *Room)  {
-	game.Spawner = &Spawner{Center: Vec2{x: GameWidth/2.0,y:GameHeight/2.0},Rotation: 0.0}
-	game.Spawner.DefaultPos = Vec2{x:0,y:-SpawnerSize}
+	game.Spawner = &Spawner{Center: Vec2{x: GameWidth/2.0,y:GameHeight/2.0},Rotation: SpawnerRotationPerSec}
+	game.Spawner.DefaultPos = Vec2{x:0,y:SpawnerSize}
 	for{
 		room.wg.Wait()
 		room.RoomMutex.Lock()
@@ -86,6 +89,10 @@ func (game *Game) Start(room *Room)  {
 		}
 		room.RoomMutex.Unlock()
 	}
+	room.RoomMutex.Lock()
+	msg := createMessage(MsgRoomInfo,room)
+	room.RoomMutex.Unlock()
+	InformAll(msg)
 	game.MaxSpawnedBalls = room.MaxPlayers*5
 	log.Println("Starting game!")
 	prevTime := time.Now()
@@ -93,34 +100,36 @@ func (game *Game) Start(room *Room)  {
 	gameUpdateTime := time.Duration(float64(time.Millisecond)*timePerUpdate)
 	playerMoves := make([]byte,room.MaxPlayers)
 	game.Platforms = make([]*Platform,room.MaxPlayers)
+	game.AlivePlayers = IntToByte(room.NumberOfPlayers)
 	for i := range game.Platforms{
 		plat := &Platform{}
 		plat.Velocity = Vec2{x:0,y:0}
+		plat.Alive = true
 		plat.Width = PlatformWidth
 		plat.Height = PlatformHeight
 		switch i {
 		case 0:
-			plat.Center = Vec2{x:GameWidth/2.0,y:GameHeight-DangerAreaSize-(PlatformHeight/2.0)}
+			plat.Center = Vec2{x:GameWidth/2.0,y:GameHeight-DangerAreaSize -PlatformDistance-(PlatformHeight/2.0)}
 		case 1:
-			plat.Center = Vec2{x:GameWidth/2.0,y:DangerAreaSize+(PlatformHeight/2.0)}
+			plat.Center = Vec2{x:GameWidth/2.0,y:DangerAreaSize+PlatformDistance+(PlatformHeight/2.0)}
 		case 2:
-			plat.Center = Vec2{x:DangerAreaSize+(PlatformHeight/2.0),y:GameHeight/2.0}
+			plat.Center = Vec2{x:DangerAreaSize + PlatformDistance+(PlatformHeight/2.0),y:GameHeight/2.0}
 			plat.Width = PlatformHeight
 			plat.Height = PlatformWidth
 		case 3:
-			plat.Center = Vec2{x:GameWidth-DangerAreaSize-(PlatformHeight/2.0),y:GameHeight/2.0}
+			plat.Center = Vec2{x:GameWidth-DangerAreaSize-PlatformDistance-(PlatformHeight/2.0),y:GameHeight/2.0}
 			plat.Width = PlatformHeight
 			plat.Height = PlatformWidth
 		}
 		game.Platforms[i] = plat
 	}
-	for{
+	gameLoop: for{
 		<-time.After(gameUpdateTime)
 		delta := time.Since(prevTime)
 		prevTime = time.Now()
 		for i, player := range  room.Players{
 			player.PlayerMutex.Lock()
-			if (player.Connected == true){
+			if (len(player.ClientGameChannels) != 0){
 				playerMoves[i] = player.LastMove
 			} else {
 				playerMoves[i] = NoneMove
@@ -128,19 +137,46 @@ func (game *Game) Start(room *Room)  {
 			player.PlayerMutex.Unlock()
 		}
 		game.MovePlayers(playerMoves)
-		//game.SpawnBall(delta, Vec2{x: GameWidth/2.0,y:GameHeight/2.0,})
 		game.SpawnBall(delta, game.Spawner.Center)
 		game.Update(delta)
 		game.CollisionDetection()
+		if game.AlivePlayers == 1 {
+			for i := range game.Lifes{
+				if game.Lifes[i] > 0 {
+					game.AlivePlayers--
+					game.FinishedPlayers[game.AlivePlayers] = IntToByte(i+1)
+				}
+			}
+		}
 		data := game.CreateData(room)
 		for _, player := range room.Players{
 			player.PlayerMutex.Lock()
-			if player.Connected == true {
-				player.GameChannel <- data
+			for _, playerChan := range player.ClientGameChannels{
+				playerChan <- data
 			}
 			player.PlayerMutex.Unlock()
 		}
+		if game.AlivePlayers == 0{
+			break gameLoop
+		}
 	}
+	playersInRoom := room.Players
+	for _, player := range playersInRoom{
+		player.PlayerMutex.Lock()
+		player.CurrentRoom = nil
+		player.PlayerMutex.Unlock()
+	}
+	room.RoomMutex.Lock()
+	room.Players = nil
+	room.RoomMutex.Unlock()
+	Server.MutexRooms.Lock()
+	delete(Server.Rooms,room.Id)
+	Server.MutexRooms.Unlock()
+	roomId := RoomId{}
+	roomId.Id = room.Id
+	msg = createMessage(MsgDeleteRoom,roomId)
+	InformAll(msg)
+	log.Println("Finished Game!")
 }
 
 func (game *Game) MovePlayers(playerMove []byte){
@@ -175,15 +211,18 @@ func (game *Game) MovePlayers(playerMove []byte){
 }
 
 func (game *Game) CreateData(room *Room) []byte {
-	// dataSize + playerCount + life*NumberOfPlayers +BallRadius + PlatformWidth + PlatformHeight + DangerZoneSize + spawnerRotation*2*dataSize  + dataSize*2pos*playerCount + dataSize*2pos*Balls
-	size := 1 + 1 +  room.MaxPlayers + DataBajtSize + (2*DataBajtSize) + DataBajtSize + (2*DataBajtSize) + (2*DataBajtSize*len(game.Platforms)) + (DataBajtSize*2*len(game.Balls))
+	// dataSize + playerCount + life*NumberOfPlayers + FinishedPlayers +BallRadius + PlatformWidth + PlatformHeight + DangerZoneSize + spawnerRotation*2*dataSize  + dataSize*2pos*playerCount + dataSize*2pos*Balls
+	size := 1 + 1 +  room.MaxPlayers + room.MaxPlayers + 1 + DataBajtSize + (2*DataBajtSize) + DataBajtSize + (2*DataBajtSize) + (2*DataBajtSize*len(game.Platforms)) + (DataBajtSize*2*len(game.Balls))
 	data := make([]byte,size)
 	index := 0
 	data[index] = DataBajtSize
 	index++
 	data[index] = IntToByte(room.MaxPlayers)
 	index++
+	data[index] = game.AlivePlayers
+	index++
 	index = PutBytesIntoData(index, data,game.Lifes)
+	index = PutBytesIntoData(index, data,game.FinishedPlayers)
 	index = PutBytesIntoData(index, data,FloatToBytes(BallRadius))
 	index = PutBytesIntoData(index, data, FloatToBytes(PlatformWidth))
 	index = PutBytesIntoData(index, data, FloatToBytes(PlatformHeight))
@@ -268,7 +307,8 @@ func (game *Game) SpawnBall(deltaSeconds time.Duration, spawnPlace Vec2){
 		return
 	}
 	game.LastSpawnedBall += deltaSeconds
-	if game.LastSpawnedBall.Seconds() <= (float64)(BallSpawnTimerInSeconds*len(game.Balls)) {
+	ballSpawnerTimer :=  BallSpawnTimerInSeconds*float64(len(game.Balls))
+	if game.LastSpawnedBall.Seconds() <= ballSpawnerTimer {
 		return
 	}
 	game.LastSpawnedBall = time.Duration(0)
@@ -287,14 +327,40 @@ func (game *Game) CollisionDetection(){
 }
 
 func (game *Game) CollisionBalls() {
+	removeBalls := make([]*Ball,0)
 	for _, ball := range game.Balls {
-		if ball.Center.x-BallRadius < 0 {
-			ball.Center.x = 0.0 + BallRadius
-			ball.Velocity.x *= -1
-		} else if ball.Center.x+BallRadius > GameWidth {
+		if game.Lifes[0] > 0 && ball.Center.y+BallRadius > GameHeight-DangerAreaSize {
+			game.LoseLife(0)
+			removeBalls = append(removeBalls, ball)
+		} else if game.Lifes[1] > 0 && ball.Center.y-BallRadius < DangerAreaSize {
+			game.LoseLife(1)
+			removeBalls = append(removeBalls, ball)
+		} else if len(game.Lifes) > 2 && game.Lifes[2] > 0 && ball.Center.x-BallRadius < DangerAreaSize {
+			game.LoseLife(2)
+			removeBalls = append(removeBalls,ball)
+		} else if len(game.Lifes) > 2 && game.Lifes[3] > 0 && ball.Center.x+BallRadius > GameWidth-DangerAreaSize{
+			game.LoseLife(3)
+			removeBalls = append(removeBalls,ball)
+		}
+	}
+	for i, rlen := 0, len(game.Balls); i < rlen ; i++ {
+		j := i - (rlen - len(game.Balls))
+		for _, ball := range removeBalls{
+			if game.Balls[j] == ball{
+				game.Balls = append(game.Balls[:j],game.Balls[j+1:]...)
+				break
+			}
+		}
+	}
+	for _, ball := range game.Balls{
+		if ball.Center.x+BallRadius > GameWidth {
 			ball.Center.x = GameWidth - BallRadius
 			ball.Velocity.x *= -1
+		} else if ball.Center.x-BallRadius < 0 {
+			ball.Center.x = 0.0 + BallRadius
+			ball.Velocity.x *= -1
 		}
+
 		if ball.Center.y-BallRadius < 0 {
 			ball.Center.y = 0 + BallRadius
 			ball.Velocity.y *= -1
@@ -329,6 +395,9 @@ func (game *Game) CollisionBalls() {
 
 func (game *Game) CollisionPlatform(){
 	for _ , plat := range game.Platforms {
+		if plat.Alive == false{
+			continue
+		}
 		for _, ball := range game.Balls {
 			nearestPoint := NearestPointRectBall(ball,plat.Center,plat.Width,plat.Height)
 			distVec, dist  := CalcDistance(nearestPoint,ball.Center)
@@ -340,14 +409,14 @@ func (game *Game) CollisionPlatform(){
 					ball.Velocity.y *= -1
 				case Right:
 					//ball.Center.x += distVec.x + ball.Radius
-					ball.Center.x = nearestPoint.x + ball.Radius
+					ball.Center.x += distVec.x + (-ball.Radius)
 					ball.Velocity.x *= -1
 				case Down:
 					ball.Center.y += distVec.y + ball.Radius
 					ball.Velocity.y *= -1
 				case Left:
+					ball.Center.x += distVec.x + ball.Radius
 					//ball.Center.x += distVec.x + (-ball.Radius)
-					ball.Center.x = nearestPoint.x + (-ball.Radius)
 					ball.Velocity.x *= -1
 				}
 			}
@@ -373,6 +442,15 @@ func CalculateDirection(dist Vec2) int{
 		}
 	}
 	return directContact
+}
+
+func (game *Game) LoseLife(index int){
+	game.Lifes[index]--
+	if game.Lifes[index] == 0{
+		game.Platforms[index].Alive = false
+		game.AlivePlayers--
+		game.FinishedPlayers[game.AlivePlayers] = IntToByte(index+1)
+	}
 }
 
 func dotProduct(vec1 Vec2, vec2 Vec2) float64{
