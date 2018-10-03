@@ -303,6 +303,12 @@ function receivedError(json){
     window.alert(json.Data.ErrorMsg);
 }
 
+
+function clearCache() {
+    document.cookie = "Player" + '=; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+}
+
+
 function receivedPlayerInfo(json){
     console.log("Received mainPlayer info");
     mainPlayer = json.Data;
@@ -372,7 +378,6 @@ function createRoom() {
     msg.Data.Life = parseInt(document.getElementById("roomLifeInput").value,10);
     socket.send(JSON.stringify(msg));
 }
-
 
 function SendInput(){
     if (PlayingGame === true){
@@ -525,16 +530,8 @@ function GetFloat(index,data, datasize){
 }
 
 var Game = {
-    init: function (gameInfo) {
-    },
-
-    // render: function () {
-    //     Game.draw(Game.GI);
-    //     requestAnimFrame(Game.render);
-    // },
 
     draw: function (gameInfo) {
-        // console.log(gameInfo);
         var dangerAreaDrawTable = [];
         switch (PlayerPosition) {
             case 0:
@@ -565,11 +562,11 @@ var Game = {
     },
 
     drawArrow: function(fromx, fromy, tox, toy){
-    var headlen = 12;   // length of head in pixels
+    var headlen = 5;   // length of head in pixels
     var angle = Math.atan2(toy-fromy,tox-fromx);
     ctx.beginPath();
         ctx.strokeStyle = '#999900';
-        ctx.lineWidth = 5;
+        ctx.lineWidth = 2;
         ctx.moveTo(fromx, fromy);
         ctx.lineTo(tox, toy);
         ctx.lineTo(tox-headlen*Math.cos(angle-Math.PI/6),toy-headlen*Math.sin(angle-Math.PI/6));
