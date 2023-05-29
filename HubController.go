@@ -153,7 +153,7 @@ func (client *ClientSession) ReceiveThread(){
 
 func (client *ClientSession) HandleMessage(message Message){
 	log.Println("Received Message: " + message.Message)
-	var err error;
+	var err error
 	err = nil
 	switch message.Message {
 	case MsgSession:
@@ -224,6 +224,7 @@ func (client *ClientSession) SendWholeMessage(message Message) error {
 	defer client.WriteMutex.Unlock()
 	err := client.Socket.WriteJSON(message)
 	if err != nil {
+
 		log.Println(err)
 	}
 	return err
